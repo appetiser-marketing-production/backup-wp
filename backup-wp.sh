@@ -86,6 +86,83 @@ esac
 backup_file="$web_root/${foldername}_backup.tar.gz"
 db_backup_file="$site_dir/wordpress.sql"
 
+# Path to wp-config.php
+wp_config_file="$site_dir/wp-config.php"
+
+# Check if wp-config.php exists
+case "$(test -f "$wp_config_file" && echo "exists" || echo "not_exists")" in
+    "exists")
+        errormsg="wp-config.php found at $wp_config_file."
+        echo "$errormsg"
+        log_action "Done" "$errormsg"
+        ;;
+    "not_exists")
+        errormsg="Error: wp-config.php not found at $wp_config_file."
+        echo "$errormsg"
+        log_action "Error" "$errormsg"
+        exit 1
+        ;;
+    *)
+        errormsg="Unexpected error occurred while checking wp-config.php."
+        echo "$errormsg"
+        log_action "Error" "$errormsg"
+        exit 1
+        ;;
+esac
+# Extract DB_NAME
+db_name=$(grep "DB_NAME" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
+
+# Check if DB_NAME was extracted successfully
+case "$db_name" in
+    "")
+        errormsg="Error: Failed to extract DB_NAME from wp-config.php."
+        echo "$errormsg"
+        log_action "Error" "$errormsg"
+        exit 1
+        ;;
+    *)
+        errormsg="DB_NAME successfully extracted: $db_name."
+        echo "$errormsg"
+        log_action "Success" "$errormsg"
+        ;;
+esac
+
+# Extract DB_USER
+db_user=$(grep "DB_USER" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
+
+# Check if DB_USER was extracted successfully
+case "$db_user" in
+    "")
+        errormsg="Error: Failed to extract DB_USER from wp-config.php."
+        echo "$errormsg"
+        log_action "Error" "$errormsg"
+        exit 1
+        ;;
+    *)
+        errormsg="DB_USER successfully extracted: $db_user."
+        echo "$errormsg"
+        log_action "Success" "$errormsg"
+        ;;
+esac
+
+# Extract DB_PASSWORD
+db_password=$(grep "DB_PASSWORD" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
+
+# Check if DB_PASSWORD was extracted successfully
+case "$db_password" in
+    "")
+        errormsg="Error: Failed to extract DB_PASSWORD from wp-config.php."
+        echo "$errormsg"
+        log_action "Error" "$errormsg"
+        exit 1
+        ;;
+    *)
+        errormsg="DB_PASSWORD successfully extracted."
+        echo "$errormsg"
+        log_action "Success" "$errormsg"
+        ;;
+esac
+
 
 # Backup database
 echo "Exporting database..."
@@ -93,8 +170,9 @@ cd "$site_dir" || {
     echo "Error: Failed to navigate to $site_dir."
     exit 1
 }
+echo "Navigated to site directory $site_dir."
 
-export_status=$(sudo -u www-data wp db export "$db_backup_file" --add-drop-table > /dev/null 2>&1 && echo "success" || echo "failure")
+export_status=$(sudo -u www-data mysqldump --add-drop-database --add-drop-table --databases "$db_name" -u"$db_user" -p"$db_password" > "$db_backup_file" 2>/dev/null && echo "success" || echo "failure")
 
 case "$export_status" in
     "success")
@@ -116,6 +194,7 @@ case "$export_status" in
         ;;
 esac
 
+
 # Create tar.gz file including all files and database dump
 echo "Creating backup archive..."
 archive_status=$(sudo -u www-data tar -czvf "$backup_file" -C "$web_root" "$foldername" > /dev/null 2>&1 && echo "success" || echo "failure")
@@ -134,30 +213,6 @@ case "$archive_status" in
         ;;
     *)
         errormsg="Unexpected error occurred during archive creation."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-esac
-
-# Clean up the database dump file
-echo "Cleaning up temporary database dump file..."
-cleanup_status=$(sudo -u www-data rm "$db_backup_file" > /dev/null 2>&1 && echo "success" || echo "failure")
-
-case "$cleanup_status" in
-    "success")
-        errormsg="Backup archive created: $backup_file"
-        echo "$errormsg"
-        log_action "Done" "$errormsg"
-        ;;
-    "failure")
-        errormsg="Error: Failed to remove temporary database dump file."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="Unexpected error occurred during cleanup."
         echo "$errormsg"
         log_action "ERROR" "$errormsg"
         exit 1
