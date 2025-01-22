@@ -219,6 +219,34 @@ case "$archive_status" in
         ;;
 esac
 
+# Clean up the database dump file
+echo "Cleaning up temporary database dump file..."
+cleanup_status=$(sudo -u www-data rm "$db_backup_file" > /dev/null 2>&1 && echo "success" || echo "failure")
+
+case "$cleanup_status" in
+    "success")
+        errormsg="Backup archive created: $backup_file"
+        echo "$errormsg"
+        log_action "Done" "$errormsg"
+        ;;
+    "failure")
+        errormsg="Error: Failed to remove temporary database dump file."
+        echo "$errormsg"
+        log_action "ERROR" "$errormsg"
+        exit 1
+        ;;
+    *)
+        errormsg="Unexpected error occurred during cleanup."
+        echo "$errormsg"
+        log_action "ERROR" "$errormsg"
+        exit 1
+        ;;
+esac
+
+
+echo "Done cleaning up temporary database dump file..."
+log_action "done" "Cleaning up temporary database dump file..."
+
 echo "Backup complete. Archive is located at $backup_file."
 
 # Echo the log file path at the end of the script
