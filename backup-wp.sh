@@ -172,7 +172,11 @@ cd "$site_dir" || {
 }
 echo "Navigated to site directory $site_dir."
 
-export_status=$(sudo -u www-data mysqldump --add-drop-database --add-drop-table --databases "$db_name" -u"$db_user" -p"$db_password" > "$db_backup_file" 2>/dev/null && echo "success" || echo "failure")
+#export_status=$(sudo -u www-data mysqldump --add-drop-database --add-drop-table --databases "$db_name" -u"$db_user" -p"$db_password" > "$db_backup_file" 2>/dev/null && echo "success" || echo "failure")
+
+cmd="sudo -u www-data mysqldump --add-drop-database --add-drop-table --databases \"$db_name\" -u\"$db_user\" -p\"$db_password\" > \"$db_backup_file\""
+echo "Executing command: $cmd"
+export_status=$(eval "$cmd 2>/dev/null && echo success || echo failure")
 
 case "$export_status" in
     "success")
