@@ -165,15 +165,39 @@ esac
 
 
 # Backup database
-echo "Exporting database..."
+#navigate to site_dir
 cd "$site_dir" || {
-    echo "Error: Failed to navigate to $site_dir."
+    errormsg="Error: Failed to navigate to $site_dir."
+    echo "$errormsg"
+    log_action "Success" "$errormsg"
     exit 1
 }
-echo "Navigated to site directory $site_dir."
+errormsg="Navigated to site directory $site_dir."
+echo "$errormsg"
+log_action "Success" "$errormsg"
+
 
 #export_status=$(sudo -u www-data mysqldump --add-drop-database --add-drop-table --databases "$db_name" -u"$db_user" -p"$db_password" > "$db_backup_file" 2>/dev/null && echo "success" || echo "failure")
 
+# Attempt to create the file as www-data
+sudo -u www-data touch "$db_backup_file"
+
+# Check if the touch command was successful
+case $? in
+    0)
+        errormsg="Successfully Created file $db_backup_file"
+        echo "$errormsg"
+        log_action "Success" "$errormsg"
+        ;;
+    *)
+        errormsg="Error: Failed to create file $db_backup_file as www-data."
+        echo "$errormsg"
+        log_action "Success" "$errormsg"
+        exit 1
+        ;;
+esac
+
+#echo "Exporting database..."
 cmd="sudo -u www-data mysqldump --add-drop-database --add-drop-table --databases \"$db_name\" -u\"$db_user\" -p\"$db_password\" > \"$db_backup_file\""
 echo "Executing command: $cmd"
 export_status=$(eval "$cmd 2>/dev/null && echo success || echo failure")
