@@ -271,7 +271,6 @@ case "$cleanup_status" in
         ;;
 esac
 
-
 echo "Done cleaning up temporary database dump file..."
 log_action "done" "Cleaning up temporary database dump file..."
 
