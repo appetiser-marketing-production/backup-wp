@@ -198,11 +198,8 @@ case $? in
 esac
 
 echo "Exporting database..."
-# Escape password properly
-escaped_password=$(printf "%q" "$db_password")
-
-# Execute mysqldump using escaped password
-if sudo -u www-data mysqldump --add-drop-database --add-drop-table --databases "$db_name" -u"$db_user" -p"$escaped_password" > "$db_backup_file" 2>/dev/null; then
+# Execute mysqldump safely without passing password directly in the command
+if sudo -u www-data bash -c "mysqldump --add-drop-database --add-drop-table --databases '$db_name' -u'$db_user' -p'$(echo "$db_password")' > '$db_backup_file' 2>/dev/null"; then
   export_status="success"
 else
   export_status="failure"
