@@ -1,11 +1,26 @@
 #!/bin/bash
 
-# Backup script for staging site
-echo "Usage: $0 <foldername>"
-echo "This script will back up ALL files including database dump file of the specified site."
+# Backup script for a WordPress staging site
+# This script backs up ALL files including the database dump of the specified WordPress site.
+# It uses a configuration file (backup-wp.conf) for automation but extracts database details from wp-config.php.
 
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+CONFIG_FILE="$SCRIPT_DIR/backup-wp.conf"
+
+echo "WordPress Backup Script"
+echo "This script will create a backup of your WordPress site, including all files and the database."
+
+# Notify the user about the optional config file
+if [[ -f "$CONFIG_FILE" ]]; then
+    echo "🔹 Using configuration file: $CONFIG_FILE"
+else
+    echo "⚠️ No configuration file found. You can create '$CONFIG_FILE' to automate input values."
+fi
+
+# Define log file for recording script activity
 LOGFILE="/var/log/backup-wp_$(whoami)_$(date +'%Y%m%d_%H%M%S').log"
 
+# Function: Logs actions and errors to a log file
 log_action() {
   local result=$?
   local time_stamp
@@ -14,16 +29,16 @@ log_action() {
   return $result
 }
 
-# Function to check if a variable is blank
+# Function: Check if a variable is blank, prompting the user if necessary
 check_blank() {
   local value="$1"
   local var_name="$2"
 
   case "$value" in
     "")
-      echo "Error: $var_name cannot be blank. Please provide a valid $var_name."
-      log_action "Error" "$var_name cannot be blank. Please provide a valid $var_name."
-      
+      errormsg="Error: $var_name cannot be blank. Please provide a valid $var_name."
+      echo "$errormsg"
+      log_action "Error" "$errormsg"
       exit 1
       ;;
     *)
@@ -32,7 +47,7 @@ check_blank() {
   esac
 }
 
-# Check if wp-cli is installed
+# Check if WP-CLI is installed
 if ! which wp > /dev/null; then
   errormsg="WP CLI could not be found. Please install WP-CLI before running this script."
   echo "$errormsg"
@@ -41,8 +56,21 @@ if ! which wp > /dev/null; then
   exit 1
 fi
 
-# Web directory
-web_root=${1:-$(read -p "Enter the web server's root directory (default: /var/www/html): " tmp && echo "${tmp:-/var/www/html}")}
+# Load configuration file if it exists
+if [[ -f "$CONFIG_FILE" ]]; then
+  source "$CONFIG_FILE"
+fi
+
+# Get web root directory (from config or use default/prompt)
+web_root=${WEB_ROOT:-$(read -p "Enter the web server's root directory (default: /var/www/): " tmp && echo "${tmp:-/var/www/}")}
+
+# Get the WordPress site folder name (from config or use default/prompt)
+foldername=${FOLDER_NAME:-$(read -p "Enter folder name (default: html): " tmp && echo "${tmp:-html}")}
+
+# Define the full path to the site directory
+site_dir="$web_root/$foldername"
+
+echo "📁 Site directory set to: $site_dir"
 
 # Navigate to the specified web server's root directory
 cd "$web_root" || {
@@ -52,154 +80,59 @@ cd "$web_root" || {
     exit 1
 }
 log_action "CHECK" "Webroot is accessible"
-echo "Webroot is accessible"
+echo "✅ Webroot is accessible"
 
-# Get the folder name from arguments or prompt
-foldername=${1:-$(read -p "Enter folder name: " tmp && echo $tmp)}
-# Check for blank
-check_blank "$foldername" "Folder name"
+# Validate that wp-config.php exists in the site directory
+wp_config_file="$site_dir/wp-config.php"
 
-# Define the full path
-site_dir="$web_root/$foldername"
+if [[ ! -f "$wp_config_file" ]]; then
+    errormsg="❌ Error: wp-config.php not found at $wp_config_file. The script cannot continue."
+    echo "$errormsg"
+    log_action "ERROR" "$errormsg"
+    exit 1
+fi
 
-# Use a case statement to check if the directory exists
-case "$(test -d "$site_dir" && echo "exists" || echo "not_exists")" in
-    "exists")
-        echo "The directory $site_dir exists and is accessible."
-        log_action "CHECK" "web directory is accessible"
-        ;;
-    "not_exists")
-        errormsg="Error: The directory $site_dir does not exist. Please check the folder name and web root."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="Unexpected error occurred while checking the directory."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-esac
+echo "✅ wp-config.php found at $wp_config_file."
+log_action "CHECK" "wp-config.php found and validated."
 
-# Define paths
+# Extract database credentials from wp-config.php
+db_name=$(grep "DB_NAME" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
+db_user=$(grep "DB_USER" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
+db_password=$(grep "DB_PASSWORD" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
+
+check_blank "$db_name" "DB_NAME"
+check_blank "$db_user" "DB_USER"
+check_blank "$db_password" "DB_PASSWORD"
+
+# Define paths for backup files
 backup_file="$web_root/${foldername}_backup.tar.gz"
 db_backup_file="$site_dir/wordpress.sql"
 
-# Path to wp-config.php
-wp_config_file="$site_dir/wp-config.php"
-
-# Check if wp-config.php exists
-case "$(test -f "$wp_config_file" && echo "exists" || echo "not_exists")" in
-    "exists")
-        errormsg="wp-config.php found at $wp_config_file."
-        echo "$errormsg"
-        log_action "Done" "$errormsg"
-        ;;
-    "not_exists")
-        errormsg="Error: wp-config.php not found at $wp_config_file."
-        echo "$errormsg"
-        log_action "Error" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="Unexpected error occurred while checking wp-config.php."
-        echo "$errormsg"
-        log_action "Error" "$errormsg"
-        exit 1
-        ;;
-esac
-# Extract DB_NAME
-db_name=$(grep "DB_NAME" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
-
-# Check if DB_NAME was extracted successfully
-case "$db_name" in
-    "")
-        errormsg="Error: Failed to extract DB_NAME from wp-config.php."
-        echo "$errormsg"
-        log_action "Error" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="DB_NAME successfully extracted: $db_name."
-        echo "$errormsg"
-        log_action "Success" "$errormsg"
-        ;;
-esac
-
-# Extract DB_USER
-db_user=$(grep "DB_USER" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
-
-# Check if DB_USER was extracted successfully
-case "$db_user" in
-    "")
-        errormsg="Error: Failed to extract DB_USER from wp-config.php."
-        echo "$errormsg"
-        log_action "Error" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="DB_USER successfully extracted: $db_user."
-        echo "$errormsg"
-        log_action "Success" "$errormsg"
-        ;;
-esac
-
-# Extract DB_PASSWORD
-db_password=$(grep "DB_PASSWORD" "$wp_config_file" | awk -F", '" '{print $2}' | awk -F"'" '{print $1}')
-
-# Check if DB_PASSWORD was extracted successfully
-case "$db_password" in
-    "")
-        errormsg="Error: Failed to extract DB_PASSWORD from wp-config.php."
-        echo "$errormsg"
-        log_action "Error" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="DB_PASSWORD successfully extracted."
-        echo "$errormsg"
-        log_action "Success" "$errormsg"
-        ;;
-esac
-
-
-# Backup database
-#navigate to site_dir
+# Navigate to the site directory
 cd "$site_dir" || {
-    errormsg="Error: Failed to navigate to $site_dir."
+    errormsg="❌ Error: Failed to navigate to $site_dir."
     echo "$errormsg"
-    log_action "Success" "$errormsg"
+    log_action "ERROR" "$errormsg"
     exit 1
 }
-errormsg="Navigated to site directory $site_dir."
-echo "$errormsg"
-log_action "Success" "$errormsg"
 
-
-#export_status=$(sudo -u www-data mysqldump --add-drop-database --add-drop-table --databases "$db_name" -u"$db_user" -p"$db_password" > "$db_backup_file" 2>/dev/null && echo "success" || echo "failure")
-
-# Attempt to create the file as www-data
+# Create the database backup file
 sudo -u www-data touch "$db_backup_file"
 
-# Check if the touch command was successful
-case $? in
-    0)
-        errormsg="Successfully Created file $db_backup_file"
-        echo "$errormsg"
-        log_action "Success" "$errormsg"
-        ;;
-    *)
-        errormsg="Error: Failed to create file $db_backup_file as www-data."
-        echo "$errormsg"
-        log_action "Success" "$errormsg"
-        exit 1
-        ;;
-esac
+if [[ $? -ne 0 ]]; then
+    errormsg="❌ Error: Failed to create file $db_backup_file as www-data."
+    echo "$errormsg"
+    log_action "ERROR" "$errormsg"
+    exit 1
+else
+    errormsg="✅ Successfully created file $db_backup_file."
+    echo "$errormsg"
+    log_action "Success" "$errormsg"
+fi
 
-echo "Exporting database..."
-# Execute mysqldump safely without passing password directly in the command
-if sudo -u www-data bash -c "mysqldump --add-drop-database --add-drop-table --databases '$db_name' -u'$db_user' -p'$(echo "$db_password")' > '$db_backup_file' 2>/dev/null"; then
+# Export the database
+echo "⏳ Exporting database..."
+if sudo -u www-data bash -c "mysqldump --add-drop-database --add-drop-table --databases '$db_name' -u'$db_user' -p'$db_password' > '$db_backup_file' 2>/dev/null"; then
   export_status="success"
 else
   export_status="failure"
@@ -207,77 +140,44 @@ fi
 
 case "$export_status" in
     "success")
-        errormsg="Database exported to $db_backup_file."
+        errormsg="✅ Database exported to $db_backup_file."
         echo "$errormsg"
         log_action "Done" "$errormsg"
         ;;
     "failure")
-        errormsg="Error: Database export failed."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="Unexpected error occurred during database export."
+        errormsg="❌ Error: Database export failed."
         echo "$errormsg"
         log_action "ERROR" "$errormsg"
         exit 1
         ;;
 esac
 
+# Create tar.gz archive containing all site files and database dump
+echo "⏳ Creating backup archive..."
+if sudo -u www-data tar -czvf "$backup_file" -C "$web_root" "$foldername" > /dev/null 2>&1; then
+    errormsg="✅ Backup archive created: $backup_file"
+    echo "$errormsg"
+    log_action "Done" "$errormsg"
+else
+    errormsg="❌ Error: Failed to create backup archive."
+    echo "$errormsg"
+    log_action "ERROR" "$errormsg"
+    exit 1
+fi
 
-# Create tar.gz file including all files and database dump
-echo "Creating backup archive..."
-archive_status=$(sudo -u www-data tar -czvf "$backup_file" -C "$web_root" "$foldername" > /dev/null 2>&1 && echo "success" || echo "failure")
+# Remove the temporary database dump file
+echo "🧹 Cleaning up temporary database dump file..."
+if sudo -u www-data rm "$db_backup_file"; then
+    errormsg="✅ Temporary database dump file removed."
+    echo "$errormsg"
+    log_action "Done" "$errormsg"
+else
+    errormsg="❌ Error: Failed to remove temporary database dump file."
+    echo "$errormsg"
+    log_action "ERROR" "$errormsg"
+    exit 1
+fi
 
-case "$archive_status" in
-    "success")
-        errormsg="Backup archive created: $backup_file"
-        echo "$errormsg"
-        log_action "Done" "$errormsg"
-        ;;
-    "failure")
-        errormsg="Error: Failed to create backup archive."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="Unexpected error occurred during archive creation."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-esac
-
-# Clean up the database dump file
-echo "Cleaning up temporary database dump file..."
-cleanup_status=$(sudo -u www-data rm "$db_backup_file" > /dev/null 2>&1 && echo "success" || echo "failure")
-
-case "$cleanup_status" in
-    "success")
-        errormsg="Backup archive created: $backup_file"
-        echo "$errormsg"
-        log_action "Done" "$errormsg"
-        ;;
-    "failure")
-        errormsg="Error: Failed to remove temporary database dump file."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-    *)
-        errormsg="Unexpected error occurred during cleanup."
-        echo "$errormsg"
-        log_action "ERROR" "$errormsg"
-        exit 1
-        ;;
-esac
-
-echo "Done cleaning up temporary database dump file..."
-log_action "done" "Cleaning up temporary database dump file..."
-
-echo "Backup complete. Archive is located at $backup_file."
-
-# Echo the log file path at the end of the script
-echo "Log file created at: $LOGFILE";
+# Final notification
+echo "✅ Backup complete. Archive is located at $backup_file."
+echo "📜 Log file created at: $LOGFILE."
