@@ -5,17 +5,20 @@
 # It uses a configuration file (backup-wp.conf) for automation but extracts database details from wp-config.php.
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-CONFIG_FILE="$SCRIPT_DIR/backup-wp.conf"
+
+#begin: change - Allow an external config file via argument
+CONFIG_FILE="${1:-$SCRIPT_DIR/backup-wp.conf}"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+    echo "🔹 Using configuration file: $CONFIG_FILE"
+    source "$CONFIG_FILE"
+else
+    echo "⚠️ No configuration file found. Using default config file or prompt."
+fi
+#end: change
 
 echo "WordPress Backup Script"
 echo "This script will create a backup of your WordPress site, including all files and the database."
-
-# Notify the user about the optional config file
-if [[ -f "$CONFIG_FILE" ]]; then
-    echo "🔹 Using configuration file: $CONFIG_FILE"
-else
-    echo "⚠️ No configuration file found. You can create '$CONFIG_FILE' to automate input values."
-fi
 
 # Define log file for recording script activity
 LOGFILE="/var/log/backup-wp_$(whoami)_$(date +'%Y%m%d_%H%M%S').log"
@@ -56,16 +59,12 @@ if ! which wp > /dev/null; then
   exit 1
 fi
 
-# Load configuration file if it exists
-if [[ -f "$CONFIG_FILE" ]]; then
-  source "$CONFIG_FILE"
-fi
-
-# Get web root directory (from config or use default/prompt)
+# Load configuration values or prompt for input if missing
+#begin: change - Ensure user input is requested if config values are missing
 web_root=${WEB_ROOT:-$(read -p "Enter the web server's root directory (default: /var/www/): " tmp && echo "${tmp:-/var/www/}")}
 
-# Get the WordPress site folder name (from config or use default/prompt)
 foldername=${FOLDER_NAME:-$(read -p "Enter folder name (default: html): " tmp && echo "${tmp:-html}")}
+#end: change
 
 # Define the full path to the site directory
 site_dir="$web_root/$foldername"

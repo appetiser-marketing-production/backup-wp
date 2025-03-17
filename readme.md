@@ -3,20 +3,17 @@
 This script automates the process of creating a complete backup of a WordPress staging site, including all files and the database. It ensures a reliable and systematic approach to safeguard your WordPress site data.
 
 ## 📝 Version Information
-- **Version:** 1.1.0
+- **Version:** 1.1.1
 - **Author:** Landing Page Team
 - **Author URI:** [https://appetiser.com.au/](https://appetiser.com.au/)
 
-### **🎉 What's New in Version 1.1.0?**
-The following improvements have been made from version **1.0.0** to **1.1.0**:
-- **🔧 Configuration file (`backup-wp.conf`) support** for `WEB_ROOT` and `FOLDER_NAME`.
-- **🔒 Database details (`DB_NAME`, `DB_USER`, `DB_PASSWORD`) are now extracted from `wp-config.php`** instead of being manually configured.
-- **🔄 Default values for prompts**:
-  - `WEB_ROOT` defaults to `/var/www/`
-  - `FOLDER_NAME` defaults to `html`
-  - Resulting in `SITE_DIR` defaulting to `/var/www/html/`.
-- **🔄 Script now correctly detects its location even when run via a symlink**, ensuring it loads `backup-wp.conf` from the same directory as the script.
-- **🎨 Improved logging and user feedback**.
+🔄 Changes in Version 1.1.1
+🔧 configuration file adjustment. it is now available for prompt if you want to use another other than the default
+
+🔄 Changes in Version 1.1.0
+🔧 Configuration file (`backup-wp.conf`) support** for `WEB_ROOT` and `FOLDER_NAME`.
+🔒 Database details (`DB_NAME`, `DB_USER`, `DB_PASSWORD`) are now extracted from `wp-config.php`** instead of being manually configured.
+🛠 Minor Fixes: Addressed minor bugs and improved script stability.
 
 ---
 
